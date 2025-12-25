@@ -1,0 +1,62 @@
+<!-- frontend/index.html -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>CityStrides Router MVP</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+      body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+      .row { display: flex; gap: 12px; padding: 12px; }
+      .col { flex: 1; min-width: 0; }
+      .panel { border: 1px solid #ddd; border-radius: 8px; padding: 12px; }
+      .imgwrap { position: relative; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
+      img { display: block; max-width: 100%; }
+      #map { height: 420px; border-radius: 8px; overflow: hidden; border: 1px solid #ddd; }
+      #routeMap { height: 420px; border-radius: 8px; overflow: hidden; border: 1px solid #ddd; }
+      input, button { padding: 8px; width: 100%; box-sizing: border-box; }
+      label { font-size: 12px; color: #555; display:block; margin-top:8px; }
+      .small { font-size: 12px; color:#666; }
+      .list { max-height: 240px; overflow:auto; }
+      .cpRow { display:flex; gap:8px; align-items:center; }
+      .cpRow button { width:auto; }
+
+      /* Crosshair overlay for "map center" capture */
+      .mapWrap { position: relative; }
+      .crosshair {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 28px;
+        height: 28px;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        z-index: 1000;
+      }
+      .crosshair:before, .crosshair:after {
+        content: "";
+        position: absolute;
+        background: rgba(0,0,0,0.65);
+      }
+      .crosshair:before {
+        left: 50%;
+        top: 0;
+        width: 2px;
+        height: 100%;
+        transform: translateX(-50%);
+      }
+      .crosshair:after {
+        top: 50%;
+        left: 0;
+        height: 2px;
+        width: 100%;
+        transform: translateY(-50%);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
