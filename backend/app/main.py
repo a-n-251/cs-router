@@ -31,6 +31,17 @@ def health():
     return {"ok": True}
 
 
+def _get_result_value(result, key, default=None):
+    """
+    Safely extract a value from either an object with attributes or a dictionary.
+    Falls back to `default` if the key/attribute is missing.
+    """
+
+    if isinstance(result, dict):
+        return result.get(key, default)
+    return getattr(result, key, default)
+
+
 def _geocode(addr: str):
     r = requests.get(
         "https://nominatim.openstreetmap.org/search",
@@ -185,27 +196,44 @@ async def _handle_plan(screenshot: UploadFile, payload: str):
         max_distance_m=req.max_distance_m,
     )
 
+    warnings = _get_result_value(result, "warnings", []) or []
+    directions = _get_result_value(result, "directions", []) or []
+
+    stats = _get_result_value(result, "stats", None)
+    if not isinstance(stats, dict):
+        stats = {}
+    stats = {
+        "distance_m_est": stats.get("distance_m_est", _get_result_value(result, "distance_m_est", 0) or 0),
+        "covered_required_len_m_est": stats.get(
+            "covered_required_len_m_est", _get_result_value(result, "covered_required_len_m_est", 0) or 0
+        ),
+        "required_segments_targeted": stats.get(
+            "required_segments_targeted", _get_result_value(result, "required_segments_targeted", 0) or 0
+        ),
+        "required_segments_total_uncompleted": stats.get(
+            "required_segments_total_uncompleted",
+            _get_result_value(result, "required_segments_total_uncompleted", 0) or 0,
+        ),
+    }
+
+    route_geojson = _get_result_value(result, "route_geojson", None)
+    if route_geojson is None:
+        route_geojson = _get_result_value(result, "route", None)
+
     # --- response ---
     resp = {
-        "warnings": result.warnings or [],
-        "stats": {
-            "distance_m_est": result.stats.get("distance_m_est", 0),
-            "covered_required_len_m_est": result.stats.get("covered_required_len_m_est", 0),
-            "required_segments_targeted": result.stats.get("required_segments_targeted", 0),
-            "required_segments_total_uncompleted": result.stats.get(
-                "required_segments_total_uncompleted", 0
-            ),
-        },
-        "directions": result.directions or [],
+        "warnings": warnings,
+        "stats": stats,
+        "directions": directions,
         "route": (
-            result.route_geojson
-            if result.route_geojson and result.route_geojson.get("features")
+            route_geojson
+            if route_geojson and route_geojson.get("features")
             else None
         ),
         "completion_debug": completion.debug,
     }
 
-    if resp["route"] is None:
+    if resp["route"] is None and "No drawable route produced" not in resp["warnings"]:
         resp["warnings"].append("No drawable route produced")
 
     return resp
