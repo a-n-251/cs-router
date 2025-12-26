@@ -177,6 +177,56 @@ const recenterMapToAddress = async () => {
       routeLayerRef.current = null;
     }
 
+    const bearingDeg = (lat1, lon1, lat2, lon2) => {
+      const phi1 = (lat1 * Math.PI) / 180;
+      const phi2 = (lat2 * Math.PI) / 180;
+      const dLon = ((lon2 - lon1) * Math.PI) / 180;
+      const y = Math.sin(dLon) * Math.cos(phi2);
+      const x =
+        Math.cos(phi1) * Math.sin(phi2) -
+        Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLon);
+      const brng = Math.atan2(y, x);
+      return ((brng * 180) / Math.PI + 360) % 360;
+    };
+
+    const makeArrowMarkers = (latlngs, stepMeters = 250) => {
+      if (!latlngs || latlngs.length < 2) return [];
+      const arrows = [];
+      let traversed = 0;
+      let target = stepMeters;
+
+      for (let i = 1; i < latlngs.length; i++) {
+        const prev = L.latLng(latlngs[i - 1]);
+        const curr = L.latLng(latlngs[i]);
+        const segLen = prev.distanceTo(curr);
+        const bearing = bearingDeg(prev.lat, prev.lng, curr.lat, curr.lng);
+
+        while (segLen > 0 && target <= traversed + segLen) {
+          const t = (target - traversed) / segLen;
+          const lat = prev.lat + (curr.lat - prev.lat) * t;
+          const lng = prev.lng + (curr.lng - prev.lng) * t;
+
+          const icon = L.divIcon({
+            className: "",
+            html: `<div class="route-arrow" style="transform: rotate(${bearing}deg);"></div>`,
+            iconSize: [12, 12],
+            iconAnchor: [6, 6],
+          });
+          arrows.push(
+            L.marker([lat, lng], {
+              icon,
+              interactive: false,
+              keyboard: false,
+            })
+          );
+          target += stepMeters;
+        }
+
+        traversed += segLen;
+      }
+      return arrows;
+    };
+
     // ✅ Compatibility: backend now returns "route" (FeatureCollection).
     // Keep supporting older "route_geojson" if present.
     const routeFC = data?.route_geojson ?? data?.route;
@@ -193,8 +243,13 @@ const recenterMapToAddress = async () => {
 
     const latlngs = coords.map(([lon, lat]) => [lat, lon]);
     const poly = L.polyline(latlngs, { weight: 5 });
-    poly.addTo(map);
-    routeLayerRef.current = poly;
+    const routeGroup = L.layerGroup();
+    routeGroup.addLayer(poly);
+
+    makeArrowMarkers(latlngs, 300).forEach((m) => routeGroup.addLayer(m));
+
+    routeGroup.addTo(map);
+    routeLayerRef.current = routeGroup;
     map.fitBounds(poly.getBounds(), { padding: [20, 20] });
 
     (data.amenities || []).forEach((a) => {

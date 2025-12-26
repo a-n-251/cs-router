@@ -45,6 +45,22 @@ def classify_required_segments(
         np.array([175, 255, 255], dtype=np.uint8),
     )
 
+    # Slightly dilate to be forgiving for parallel/offset paths (e.g., footpaths).
+    DILATION_RADIUS_PX = 2
+    if DILATION_RADIUS_PX > 0:
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE,
+            (DILATION_RADIUS_PX * 2 + 1, DILATION_RADIUS_PX * 2 + 1),
+        )
+        expanded_mask = cv2.dilate(purple_mask, kernel, iterations=1)
+    else:
+        expanded_mask = purple_mask
+
+    # Distance (in px) to the nearest purple pixel after dilation.
+    purple_distance = cv2.distanceTransform(
+        255 - expanded_mask, cv2.DIST_L2, 3
+    )
+
     purple_px = int(np.count_nonzero(purple_mask))
     total_px = int(w * h)
 
@@ -52,6 +68,7 @@ def classify_required_segments(
     tf_3857_to_4326 = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
 
     SEARCH_RADIUS_PX = 12
+    NEARBY_DISTANCE_PX = 18  # Allow “close but parallel” lines to count as a hit.
     SAMPLES_PER_SEGMENT = 60
 
     completed = []
@@ -66,6 +83,7 @@ def classify_required_segments(
     total_samples = 0
     in_bounds_samples = 0
     purple_hit_samples = 0
+    nearby_only_hits = 0
 
     # keep a few examples so you can see coordinate sanity
     example_points: List[Dict[str, Any]] = []
@@ -103,9 +121,14 @@ def classify_required_segments(
                 y0 = max(iy - SEARCH_RADIUS_PX, 0)
                 y1 = min(iy + SEARCH_RADIUS_PX, h - 1)
 
-                if np.any(purple_mask[y0:y1 + 1, x0:x1 + 1]):
+                has_direct_hit = np.any(expanded_mask[y0:y1 + 1, x0:x1 + 1])
+                is_near_hit = purple_distance[iy, ix] <= NEARBY_DISTANCE_PX
+
+                if has_direct_hit or is_near_hit:
                     hits += 1
                     purple_hit_samples += 1
+                    if is_near_hit and not has_direct_hit:
+                        nearby_only_hits += 1
 
             # collect a few sample mappings for sanity
             if len(example_points) < 12 and i % 50 == 0:
@@ -157,15 +180,18 @@ def classify_required_segments(
             "purple_fraction": (purple_px / total_px) if total_px else 0.0,
             "hsv_range": {"low": [105, 25, 25], "high": [175, 255, 255]},
             "search_radius_px": SEARCH_RADIUS_PX,
+            "dilation_radius_px": DILATION_RADIUS_PX,
         },
         "sampling": {
             "samples_per_segment": SAMPLES_PER_SEGMENT,
             "total_samples": total_samples,
             "in_bounds_samples": in_bounds_samples,
             "purple_hit_samples": purple_hit_samples,
+            "nearby_only_hit_samples": nearby_only_hits,
             "in_bounds_fraction": (in_bounds_samples / total_samples) if total_samples else 0.0,
             "purple_hit_fraction_of_in_bounds": (purple_hit_samples / in_bounds_samples) if in_bounds_samples else 0.0,
             "completion_ratio_threshold": float(completion_ratio),
+            "nearby_hit_distance_px": NEARBY_DISTANCE_PX,
         },
         "segments": {
             "segs_input": len(required_segments),
