@@ -43,19 +43,55 @@ def _geocode(addr: str):
     return float(r.json()[0]["lat"]), float(r.json()[0]["lon"])
 
 
-def _extract_completed_mask(completion, n_segments: int):
+def _normalize_bool_mask(mask, n_segments: int):
+    """
+    Normalize a truthy/falsey mask to exactly `n_segments` entries.
+    Truncates extra entries and pads missing entries with False.
+    """
+    normalized = [bool(v) for v in list(mask or [])]
+    if len(normalized) < n_segments:
+        normalized.extend([False] * (n_segments - len(normalized)))
+    return normalized[:n_segments]
+
+
+def _extract_completed_mask(completion, required_segments):
     """
     Completion is index-based. Try known representations and
     return a boolean mask aligned with required_segments.
     """
+    n_segments = len(required_segments)
+
     if hasattr(completion, "completed_mask"):
-        return completion.completed_mask
+        return _normalize_bool_mask(completion.completed_mask, n_segments)
 
     if hasattr(completion, "completed"):
-        return completion.completed
+        completed_attr = completion.completed
+
+        # Already a bool mask? Normalize length.
+        if completed_attr and all(isinstance(v, bool) for v in completed_attr):
+            return _normalize_bool_mask(completed_attr, n_segments)
+
+        # Otherwise assume it's an iterable of segment objects.
+        bool_mask = [False] * n_segments
+        required_by_id = {id(seg): i for i, seg in enumerate(required_segments)}
+        required_by_seg_id = {
+            getattr(seg, "seg_id", None): i
+            for i, seg in enumerate(required_segments)
+            if getattr(seg, "seg_id", None) is not None
+        }
+
+        for seg in completed_attr:
+            idx = required_by_id.get(id(seg))
+            if idx is None:
+                seg_id = getattr(seg, "seg_id", None)
+                idx = required_by_seg_id.get(seg_id)
+            if idx is not None and 0 <= idx < n_segments:
+                bool_mask[idx] = True
+
+        return bool_mask
 
     if hasattr(completion, "segment_completed"):
-        return completion.segment_completed
+        return _normalize_bool_mask(completion.segment_completed, n_segments)
 
     # Fallback: derive from debug summaries if present
     dbg = getattr(completion, "debug", {})
@@ -64,7 +100,9 @@ def _extract_completed_mask(completion, n_segments: int):
         mask = [False] * n_segments
         for s in summaries:
             if s.get("completed"):
-                mask[s["seg_index"]] = True
+                idx = s.get("seg_index")
+                if isinstance(idx, int) and 0 <= idx < n_segments:
+                    mask[idx] = True
         return mask
 
     raise HTTPException(
@@ -121,10 +159,7 @@ async def _handle_plan(screenshot: UploadFile, payload: str):
     )
 
     # --- uncompleted required segments (INDEX-BASED) ---
-    completed_mask = _extract_completed_mask(
-        completion,
-        n_segments=len(bundle.required_segments),
-    )
+    completed_mask = _extract_completed_mask(completion, bundle.required_segments)
 
     uncompleted_segments = [
         seg
