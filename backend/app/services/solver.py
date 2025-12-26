@@ -87,15 +87,12 @@ def _path_length_m(G: nx.Graph, path: List[Tuple[int, int]]) -> float:
 
 def _path_to_geojson(bundle: GraphBundle, node_path: List[Tuple[int, int]]) -> Dict[str, Any]:
     # node x/y are EPSG:3857 (meters). Convert to lon/lat for frontend.
-    tf_back = bundle.tf  # 4326->3857; we need inverse
-    inv = bundle.tf.inverse
-
     coords = []
     for n in node_path:
         data = bundle.G.nodes[n]
         x = float(data.get("x", n[0]))
         y = float(data.get("y", n[1]))
-        lon, lat = inv.transform(x, y)
+        lon, lat = bundle.to_wgs84(x, y)
         coords.append([float(lon), float(lat)])
 
     return {

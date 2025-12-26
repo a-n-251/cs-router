@@ -21,6 +21,7 @@ class GraphBundle:
     G: nx.Graph
     required_segments: List[Segment]
     tf: Transformer
+    tf_inv: Transformer
     clip_poly_3857: Polygon
 
     def to_3857(self, lon: Union[float, Point], lat: Optional[float] = None) -> Tuple[float, float]:
@@ -35,6 +36,12 @@ class GraphBundle:
         if lat is None:
             raise TypeError("to_3857() requires (lon, lat) or Point(lon, lat)")
         return self.tf.transform(float(lon), float(lat))
+
+    def to_wgs84(self, x: float, y: float) -> Tuple[float, float]:
+        """
+        Transform projected EPSG:3857 coordinates back to lon/lat (EPSG:4326).
+        """
+        return self.tf_inv.transform(float(x), float(y))
 
 
 def _parse_osm(raw: dict) -> Tuple[Dict[int, Tuple[float, float, Dict[str, Any]]], List[Dict[str, Any]]]:
@@ -149,6 +156,7 @@ def build_graph_bundle(
     max_required_edge_len_m: float,
 ) -> GraphBundle:
     tf = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+    tf_inv = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
 
     clip_coords = [tf.transform(x, y) for x, y in clip_poly_wgs84.exterior.coords]
     clip3857 = Polygon(clip_coords)
@@ -240,4 +248,10 @@ def build_graph_bundle(
                     )
                 )
 
-    return GraphBundle(G=G, required_segments=required, tf=tf, clip_poly_3857=clip3857)
+    return GraphBundle(
+        G=G,
+        required_segments=required,
+        tf=tf,
+        tf_inv=tf_inv,
+        clip_poly_3857=clip3857,
+    )
