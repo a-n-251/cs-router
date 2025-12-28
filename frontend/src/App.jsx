@@ -209,8 +209,8 @@ const recenterMapToAddress = async () => {
           const icon = L.divIcon({
             className: "",
             html: `<div class="route-arrow" style="transform: rotate(${bearing}deg);"></div>`,
-            iconSize: [12, 12],
-            iconAnchor: [6, 6],
+            iconSize: [14, 14],
+            iconAnchor: [7, 7],
           });
           arrows.push(
             L.marker([lat, lng], {
@@ -246,7 +246,60 @@ const recenterMapToAddress = async () => {
     const routeGroup = L.layerGroup();
     routeGroup.addLayer(poly);
 
+    const isLoop = Boolean(data?.is_loop);
+
+    // Start marker (neon green circle)
+    const startLatLng = latlngs[0];
+    routeGroup.addLayer(
+      L.circleMarker(startLatLng, {
+        radius: 8,
+        color: "#39ff14",
+        fillColor: "#39ff14",
+        fillOpacity: 0.9,
+        weight: 3,
+        interactive: false,
+      })
+    );
+
+    // End marker (bright red hexagon) only for non-loop routes
+    if (!isLoop && latlngs.length > 1) {
+      const endLatLng = latlngs[latlngs.length - 1];
+      const endIcon = L.divIcon({
+        className: "",
+        html: `<div class="route-end-icon"></div>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9],
+      });
+      routeGroup.addLayer(
+        L.marker(endLatLng, { icon: endIcon, interactive: false, keyboard: false })
+      );
+    }
+
     makeArrowMarkers(latlngs, 300).forEach((m) => routeGroup.addLayer(m));
+
+    // Unreachable segments overlay (orange dashed)
+    const unreachableFC = data?.unreachable_segments;
+    if (unreachableFC?.features?.length) {
+      unreachableFC.features.forEach((feat) => {
+        const uc = feat?.geometry?.coordinates;
+        if (!uc || uc.length < 2) return;
+        const ll = uc.map(([lon, lat]) => [lat, lon]);
+        const line = L.polyline(ll, {
+          color: "#ff8c00",
+          weight: 4,
+          dashArray: "8 6",
+          opacity: 0.9,
+        });
+        if (feat.properties?.name) {
+          line.bindTooltip(`Unreachable: ${feat.properties.name}`, {
+            permanent: false,
+            direction: "top",
+            offset: [0, -4],
+          });
+        }
+        routeGroup.addLayer(line);
+      });
+    }
 
     routeGroup.addTo(map);
     routeLayerRef.current = routeGroup;

@@ -54,15 +54,42 @@
         transform: translateY(-50%);
       }
 
-      /* Direction arrows on route polyline */
+      /* Direction arrows on route polyline (compact chevrons) */
       .route-arrow {
-        width: 0;
-        height: 0;
-        border-left: 6px solid transparent;
-        border-right: 6px solid transparent;
-        border-top: 12px solid #ffd400;
-        filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.35));
+        position: relative;
+        width: 12px;
+        height: 12px;
         transform-origin: center center;
+      }
+      .route-arrow::before,
+      .route-arrow::after {
+        content: "";
+        position: absolute;
+        width: 10px;
+        height: 2px;
+        background: #ffd400;
+        top: 50%;
+        left: 1px;
+        transform-origin: left center;
+        box-shadow: 0 0 2px rgba(0, 0, 0, 0.35);
+      }
+      .route-arrow::before { transform: rotate(35deg); }
+      .route-arrow::after { transform: rotate(-35deg); }
+
+      .route-end-icon {
+        width: 18px;
+        height: 18px;
+        background: #ff1744;
+        clip-path: polygon(
+          25% 0%,
+          75% 0%,
+          100% 50%,
+          75% 100%,
+          25% 100%,
+          0% 50%
+        );
+        border: 2px solid #b00020;
+        box-shadow: 0 0 4px rgba(0,0,0,0.45);
       }
     </style>
   </head>

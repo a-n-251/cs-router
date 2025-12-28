@@ -89,6 +89,9 @@ def classify_required_segments(
     example_points: List[Dict[str, Any]] = []
     example_segs: List[Dict[str, Any]] = []
 
+    # Treat very short segments as incomplete unless we see purple near the middle.
+    SHORT_SEGMENT_LEN_M = 100.0
+
     for i, seg in enumerate(required_segments):
         ls: LineString = seg.geom_3857
         if ls is None or ls.is_empty:
@@ -100,6 +103,8 @@ def classify_required_segments(
         total = 0
 
         # sample along the 3857 geometry
+        center_hits = 0
+
         for d in np.linspace(0, ls.length, SAMPLES_PER_SEGMENT):
             pt = ls.interpolate(float(d))
 
@@ -130,6 +135,12 @@ def classify_required_segments(
                     if is_near_hit and not has_direct_hit:
                         nearby_only_hits += 1
 
+                    # Track hits that land away from the segment ends.
+                    if ls.length > 0:
+                        t = d / ls.length
+                        if 0.2 <= t <= 0.8:
+                            center_hits += 1
+
             # collect a few sample mappings for sanity
             if len(example_points) < 12 and i % 50 == 0:
                 example_points.append(
@@ -149,6 +160,12 @@ def classify_required_segments(
             continue
 
         ratio = hits / total
+
+        # If only the endpoints of a very short street are purple (e.g., nodes at
+        # the ends when a perpendicular street was completed), require at least one
+        # hit near the middle before considering the street complete.
+        if ls.length <= SHORT_SEGMENT_LEN_M and hits > 0 and center_hits == 0:
+            ratio = 0.0
 
         if len(example_segs) < 20 and i % 25 == 0:
             example_segs.append(
