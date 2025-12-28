@@ -239,46 +239,55 @@ const recenterMapToAddress = async () => {
       routeFC?.geometry?.coordinates ??
       null;
 
-    if (!coords || coords.length < 2) return;
-
-    const latlngs = coords.map(([lon, lat]) => [lat, lon]);
-    const poly = L.polyline(latlngs, { weight: 5 });
+    const latlngs = coords && coords.length >= 2 ? coords.map(([lon, lat]) => [lat, lon]) : [];
     const routeGroup = L.layerGroup();
-    routeGroup.addLayer(poly);
-
+    const bounds = L.latLngBounds([]);
     const isLoop = Boolean(data?.is_loop);
 
-    // Start marker (neon green circle)
-    const startLatLng = latlngs[0];
-    routeGroup.addLayer(
-      L.circleMarker(startLatLng, {
-        radius: 8,
-        color: "#39ff14",
-        fillColor: "#39ff14",
-        fillOpacity: 0.9,
-        weight: 3,
-        interactive: false,
-      })
-    );
+    if (latlngs.length >= 2) {
+      const poly = L.polyline(latlngs, { weight: 5 });
+      routeGroup.addLayer(poly);
+      bounds.extend(poly.getBounds());
 
-    // End marker (bright red hexagon) only for non-loop routes
-    if (!isLoop && latlngs.length > 1) {
-      const endLatLng = latlngs[latlngs.length - 1];
-      const endIcon = L.divIcon({
-        className: "",
-        html: `<div class="route-end-icon"></div>`,
-        iconSize: [18, 18],
-        iconAnchor: [9, 9],
-      });
+      // Start marker (neon green circle)
+      const startLatLng = latlngs[0];
       routeGroup.addLayer(
-        L.marker(endLatLng, { icon: endIcon, interactive: false, keyboard: false })
+        L.circleMarker(startLatLng, {
+          radius: 8,
+          color: "#39ff14",
+          fillColor: "#39ff14",
+          fillOpacity: 0.9,
+          weight: 3,
+          interactive: false,
+        })
       );
-    }
 
-    makeArrowMarkers(latlngs, 300).forEach((m) => routeGroup.addLayer(m));
+      // End marker (bright red hexagon) only for non-loop routes
+      if (!isLoop && latlngs.length > 1) {
+        const endLatLng = latlngs[latlngs.length - 1];
+        const endIcon = L.divIcon({
+          className: "",
+          html: `<div class="route-end-icon"></div>`,
+          iconSize: [18, 18],
+          iconAnchor: [9, 9],
+        });
+        routeGroup.addLayer(
+          L.marker(endLatLng, { icon: endIcon, interactive: false, keyboard: false })
+        );
+      }
+
+      makeArrowMarkers(latlngs, 300).forEach((m) => routeGroup.addLayer(m));
+    }
 
     // Unreachable segments overlay (orange dashed)
     const unreachableFC = data?.unreachable_segments;
+    const unreachableIcon = L.divIcon({
+      className: "",
+      html: `<div class="unreachable-marker"></div>`,
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+    });
+
     if (unreachableFC?.features?.length) {
       unreachableFC.features.forEach((feat) => {
         const uc = feat?.geometry?.coordinates;
@@ -290,6 +299,7 @@ const recenterMapToAddress = async () => {
           dashArray: "8 6",
           opacity: 0.9,
         });
+        bounds.extend(line.getBounds());
         if (feat.properties?.name) {
           line.bindTooltip(`Unreachable: ${feat.properties.name}`, {
             permanent: false,
@@ -298,12 +308,32 @@ const recenterMapToAddress = async () => {
           });
         }
         routeGroup.addLayer(line);
+
+        const centroid = line.getBounds().getCenter();
+        const marker = L.marker(centroid, {
+          icon: unreachableIcon,
+          interactive: true,
+          keyboard: false,
+        });
+        marker.bindTooltip(
+          feat.properties?.name
+            ? `Unreachable: ${feat.properties.name}`
+            : "Unreachable segment",
+          {
+            permanent: false,
+            direction: "top",
+            offset: [0, -6],
+          }
+        );
+        routeGroup.addLayer(marker);
       });
     }
 
     routeGroup.addTo(map);
     routeLayerRef.current = routeGroup;
-    map.fitBounds(poly.getBounds(), { padding: [20, 20] });
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [20, 20] });
+    }
 
     (data.amenities || []).forEach((a) => {
       L.circleMarker([a.lat, a.lon], { radius: 6 })

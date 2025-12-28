@@ -91,6 +91,33 @@
         border: 2px solid #b00020;
         box-shadow: 0 0 4px rgba(0,0,0,0.45);
       }
+
+      .unreachable-marker {
+        width: 18px;
+        height: 18px;
+        background: rgba(255, 140, 0, 0.14);
+        border: 2px solid #ff8c00;
+        border-radius: 50%;
+        position: relative;
+        box-shadow: 0 0 6px rgba(0,0,0,0.35);
+      }
+      .unreachable-marker::before,
+      .unreachable-marker::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 12px;
+        height: 2px;
+        background: #ff8c00;
+        transform-origin: center center;
+      }
+      .unreachable-marker::before {
+        transform: translate(-50%, -50%) rotate(45deg);
+      }
+      .unreachable-marker::after {
+        transform: translate(-50%, -50%) rotate(-45deg);
+      }
     </style>
   </head>
   <body>

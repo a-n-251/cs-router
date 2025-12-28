@@ -46,7 +46,7 @@ def classify_required_segments(
     )
 
     # Slightly dilate to be forgiving for parallel/offset paths (e.g., footpaths).
-    DILATION_RADIUS_PX = 3
+    DILATION_RADIUS_PX = 4
     if DILATION_RADIUS_PX > 0:
         kernel = cv2.getStructuringElement(
             cv2.MORPH_ELLIPSE,
@@ -68,8 +68,12 @@ def classify_required_segments(
     tf_3857_to_4326 = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
 
     SEARCH_RADIUS_PX = 14
-    NEARBY_DISTANCE_PX = 26  # Allow “close but parallel” lines to count as a hit.
+    NEARBY_DISTANCE_PX = 32  # Allow “close but parallel” lines to count as a hit.
     SAMPLES_PER_SEGMENT = 60
+
+    # Be slightly more forgiving when the georeference is a bit off.
+    ADAPTIVE_COMPLETION_RATIO = max(0.75, completion_ratio - 0.12)
+    ADAPTIVE_MIN_HITS = 6
 
     completed = []
     uncompleted = []
@@ -185,6 +189,9 @@ def classify_required_segments(
         if ratio >= completion_ratio:
             completed.append(seg)
             segs_completed += 1
+        elif ratio >= ADAPTIVE_COMPLETION_RATIO and hits >= max(ADAPTIVE_MIN_HITS, int(0.6 * total)):
+            completed.append(seg)
+            segs_completed += 1
         else:
             uncompleted.append(seg)
             segs_uncompleted += 1
@@ -208,6 +215,7 @@ def classify_required_segments(
             "in_bounds_fraction": (in_bounds_samples / total_samples) if total_samples else 0.0,
             "purple_hit_fraction_of_in_bounds": (purple_hit_samples / in_bounds_samples) if in_bounds_samples else 0.0,
             "completion_ratio_threshold": float(completion_ratio),
+            "adaptive_completion_ratio": float(ADAPTIVE_COMPLETION_RATIO),
             "nearby_hit_distance_px": NEARBY_DISTANCE_PX,
         },
         "segments": {

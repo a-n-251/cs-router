@@ -181,6 +181,16 @@ def _segment_to_feature(bundle: GraphBundle, seg: Segment) -> Dict[str, Any]:
     }
 
 
+def _segment_display_name(seg: Segment) -> str:
+    base = seg.tags.get("name") or seg.tags.get("ref") or seg.tags.get("highway") or "segment"
+    length_m = getattr(seg, "length_m", None)
+    if length_m is None:
+        return base
+    if length_m >= 1000:
+        return f"{base} ({length_m/1000:.1f} km)"
+    return f"{base} ({int(round(length_m))} m)"
+
+
 def plan_route(
     bundle: GraphBundle,
     start_lon: float,
@@ -233,13 +243,13 @@ def plan_route(
         if (u not in start_cc) and (v not in start_cc):
             unreachable.append(seg)
             continue
+        path_uv = _shortest_path_nodes(G, u, v)
+        if path_uv is None or len(path_uv) < 2:
+            unreachable.append(seg)
+            continue
         snapped.append((seg, u, v, mid))
 
-    warnings = []
-    if unreachable:
-        warnings.append(
-            f"{len(unreachable)} required segments are unreachable using OSM connectivity and were ignored. Consider adjusting the screenshot bounds."
-        )
+    warnings: List[str] = []
 
     # Greedy cover: repeatedly go to nearest uncovered segment endpoint (u or v),
     # then traverse "through" that segment by visiting its far endpoint if possible.
@@ -284,7 +294,10 @@ def plan_route(
 
                 # Optionally include traversing to the other endpoint (to "cover" the segment)
                 p2 = _shortest_path_nodes(G, entry, other)
-                trav = _path_length_m(G, p2) if p2 else 0.0
+                if not p2 or len(p2) < 2:
+                    continue
+
+                trav = _path_length_m(G, p2)
 
                 total = cost + trav
 
@@ -320,9 +333,15 @@ def plan_route(
         current = entry
 
         # Move through segment if possible (helps ensure coverage)
-        if p_entry_to_other:
+        if p_entry_to_other and len(p_entry_to_other) >= 2:
             append_path(p_entry_to_other)
             current = other
+        else:
+            # Should not happen after upfront connectivity filtering, but guard against
+            # counting a segment as covered without traversing it.
+            unreachable.append(seg)
+            remaining = [t for t in remaining if t[0].seg_id != seg.seg_id]
+            continue
 
         targeted.append(seg.seg_id)
         covered_len += float(seg.length_m)
@@ -367,6 +386,17 @@ def plan_route(
             "type": "FeatureCollection",
             "features": [_segment_to_feature(bundle, s) for s in unreachable],
         }
+
+        names_preview = ", ".join(_segment_display_name(s) for s in unreachable[:3])
+        extra = "" if len(unreachable) <= 3 else f", +{len(unreachable) - 3} more"
+        if len(unreachable) == 1:
+            warnings.append(
+                f"1 required segment is unreachable using OSM connectivity and was ignored ({names_preview}). Consider adjusting the screenshot bounds."
+            )
+        else:
+            warnings.append(
+                f"{len(unreachable)} required segments are unreachable using OSM connectivity and were ignored ({names_preview}{extra}). Consider adjusting the screenshot bounds."
+            )
 
     return {
         "route": route_geojson,
