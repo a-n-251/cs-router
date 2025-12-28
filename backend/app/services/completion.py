@@ -41,12 +41,12 @@ def classify_required_segments(
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     purple_mask = cv2.inRange(
         hsv,
-        np.array([105, 25, 25], dtype=np.uint8),
-        np.array([175, 255, 255], dtype=np.uint8),
+        np.array([95, 18, 18], dtype=np.uint8),
+        np.array([180, 255, 255], dtype=np.uint8),
     )
 
     # Slightly dilate to be forgiving for parallel/offset paths (e.g., footpaths).
-    DILATION_RADIUS_PX = 2
+    DILATION_RADIUS_PX = 3
     if DILATION_RADIUS_PX > 0:
         kernel = cv2.getStructuringElement(
             cv2.MORPH_ELLIPSE,
@@ -67,8 +67,8 @@ def classify_required_segments(
     # IMPORTANT: segment points are EPSG:3857. Convert to lon/lat before lonlat_to_pix.
     tf_3857_to_4326 = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
 
-    SEARCH_RADIUS_PX = 12
-    NEARBY_DISTANCE_PX = 18  # Allow “close but parallel” lines to count as a hit.
+    SEARCH_RADIUS_PX = 14
+    NEARBY_DISTANCE_PX = 26  # Allow “close but parallel” lines to count as a hit.
     SAMPLES_PER_SEGMENT = 60
 
     completed = []
@@ -178,7 +178,7 @@ def classify_required_segments(
             "purple_px": purple_px,
             "total_px": total_px,
             "purple_fraction": (purple_px / total_px) if total_px else 0.0,
-            "hsv_range": {"low": [105, 25, 25], "high": [175, 255, 255]},
+            "hsv_range": {"low": [95, 18, 18], "high": [180, 255, 255]},
             "search_radius_px": SEARCH_RADIUS_PX,
             "dilation_radius_px": DILATION_RADIUS_PX,
         },

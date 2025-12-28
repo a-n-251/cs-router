@@ -186,6 +186,10 @@ def build_graph_bundle(
         geoms = [clipped] if isinstance(clipped, LineString) else list(getattr(clipped, "geoms", []))
         way_name = tags.get("name") or tags.get("ref") or tags.get("highway") or "way"
         highway = tags.get("highway")
+        service_kind = tags.get("service")
+        is_unnamed_service = highway == "service" and not tags.get("name")
+        is_driveway_like = service_kind in {None, "driveway", "parking_aisle", "drive-through", "drive_through"}
+        weight_penalty = 4.0 if is_unnamed_service and is_driveway_like else 1.0
 
         for g in geoms:
             coords = list(g.coords)
@@ -206,8 +210,9 @@ def build_graph_bundle(
                 # If multiple edges collapse into one undirected edge, keep the shortest weight,
                 # but keep the "best" name (prefer real name over generic).
                 if G.has_edge(k1, k2):
-                    if dist < float(G[k1][k2]["weight"]):
-                        G[k1][k2]["weight"] = float(dist)
+                    if dist < float(G[k1][k2]["distance_m"]):
+                        G[k1][k2]["weight"] = float(dist * weight_penalty)
+                        G[k1][k2]["distance_m"] = float(dist)
                         G[k1][k2]["name"] = way_name
                         G[k1][k2]["highway"] = highway
                         G[k1][k2]["way_id"] = int(w["id"])
@@ -215,7 +220,8 @@ def build_graph_bundle(
                     G.add_edge(
                         k1,
                         k2,
-                        weight=float(dist),
+                        weight=float(dist * weight_penalty),
+                        distance_m=float(dist),
                         name=way_name,
                         highway=highway,
                         way_id=int(w["id"]),
