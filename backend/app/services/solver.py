@@ -81,7 +81,8 @@ def _path_length_m(G: nx.Graph, path: List[Tuple[int, int]]) -> float:
         return 0.0
     total = 0.0
     for a, b in zip(path, path[1:]):
-        total += float(G[a][b]["weight"])
+        ed = G[a][b]
+        total += float(ed.get("distance_m", ed.get("weight", 0.0)))
     return total
 
 
@@ -115,7 +116,7 @@ def _build_directions(bundle: GraphBundle, node_path: List[Tuple[int, int]]) -> 
         bx = float(G.nodes[b].get("x", b[0]))
         by = float(G.nodes[b].get("y", b[1]))
         name = ed.get("name") or "unnamed road"
-        length = float(ed.get("weight", 0.0))
+        length = float(ed.get("distance_m", ed.get("weight", 0.0)))
         brg = _bearing((ax, ay), (bx, by))
         edges.append((name, length, brg))
 
