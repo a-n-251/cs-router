@@ -43,7 +43,7 @@ def _delta_angle(a: float, b: float) -> float:
     return d
 
 
-def _nearest_node(G: nx.Graph, x: float, y: float) -> Optional[Tuple[int, int]]:
+def _nearest_node(G: nx.Graph, x: float, y: float, exclude: Optional[set] = None) -> Optional[Tuple[int, int]]:
     if G.number_of_nodes() == 0:
         return None
 
@@ -53,6 +53,8 @@ def _nearest_node(G: nx.Graph, x: float, y: float) -> Optional[Tuple[int, int]]:
         nxv = float(data.get("x", n[0]))
         nyv = float(data.get("y", n[1]))
         d = (nxv - x) * (nxv - x) + (nyv - y) * (nyv - y)
+        if exclude and n in exclude:
+            continue
         if d < bestd:
             bestd = d
             best = n
@@ -64,7 +66,16 @@ def _snap_segment_endpoints(bundle: GraphBundle, seg: Segment) -> Tuple[Optional
     a = seg.geom_3857.coords[0]
     b = seg.geom_3857.coords[-1]
     u = _nearest_node(G, a[0], a[1])
-    v = _nearest_node(G, b[0], b[1])
+    # Prefer a distinct node for the second endpoint to avoid collapsing the segment
+    v = _nearest_node(G, b[0], b[1], exclude={u} if u else None)
+    if v is None:
+        v = _nearest_node(G, b[0], b[1])
+    # As a fallback, try snapping the midpoint to a different node
+    mid_tmp = seg.geom_3857.interpolate(0.5, normalized=True)
+    if u is not None and v == u:
+        alt = _nearest_node(G, mid_tmp.x, mid_tmp.y, exclude={u})
+        if alt is not None:
+            v = alt
     mid = seg.geom_3857.interpolate(0.5, normalized=True)
     return u, v, (mid.x, mid.y)
 
@@ -151,6 +162,23 @@ def _build_directions(bundle: GraphBundle, node_path: List[Tuple[int, int]]) -> 
         prev_brg = brg
 
     return steps
+
+
+def _segment_to_feature(bundle: GraphBundle, seg: Segment) -> Dict[str, Any]:
+    coords = []
+    for x, y in seg.geom_3857.coords:
+        lon, lat = bundle.to_wgs84(x, y)
+        coords.append([float(lon), float(lat)])
+    name = seg.tags.get("name") or seg.tags.get("ref") or seg.tags.get("highway") or "unreachable segment"
+    return {
+        "type": "Feature",
+        "properties": {
+            "name": name,
+            "length_m": float(seg.length_m),
+            "seg_id": seg.seg_id,
+        },
+        "geometry": {"type": "LineString", "coordinates": coords},
+    }
 
 
 def plan_route(
@@ -333,6 +361,13 @@ def plan_route(
         "targeted_seg_ids_sample": targeted[:10],
     }
 
+    unreachable_fc = None
+    if unreachable:
+        unreachable_fc = {
+            "type": "FeatureCollection",
+            "features": [_segment_to_feature(bundle, s) for s in unreachable],
+        }
+
     return {
         "route": route_geojson,
         "directions": directions,
@@ -342,4 +377,5 @@ def plan_route(
         "required_segments_total_uncompleted": int(len(uncompleted_required_segments)),
         "warnings": warnings + ([] if route_geojson else ["No drawable route produced"]),
         "routing_debug": routing_debug,
+        "unreachable_segments": unreachable_fc,
     }

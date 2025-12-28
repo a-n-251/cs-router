@@ -220,6 +220,8 @@ async def _handle_plan(screenshot: UploadFile, payload: str):
     if route_geojson is None:
         route_geojson = _get_result_value(result, "route", None)
 
+    unreachable_segments = _get_result_value(result, "unreachable_segments", None)
+
     # --- response ---
     resp = {
         "warnings": warnings,
@@ -231,6 +233,8 @@ async def _handle_plan(screenshot: UploadFile, payload: str):
             else None
         ),
         "completion_debug": completion.debug,
+        "unreachable_segments": unreachable_segments,
+        "is_loop": bool(req.loop),
     }
 
     if resp["route"] is None and "No drawable route produced" not in resp["warnings"]:
